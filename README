@@ -1,0 +1,25 @@
+pynoflushd - hard disk drive spindown control daemon
+
+Inspired by noflushd.
+
+The problem I have with noflushd is I use soft raid. noflushd is not aware of
+(virtual) block device dependencies, so it flushes any device it didn't ask to
+spin down. The result is properly spinning down a physical drive, and right
+next flush a raid device, spinning up disk again as raid superblock gets
+refreshed.
+
+This reimplementation fixes this - but looses many features I do not use:
+- only one timeout supported, no sighandler to switch
+- no reaction to irq usage (I use this on a file server, so monitoring disk
+  usage is all I need)
+- relies on hdparm to send sleep command, and query drive state
+Patches welcome.
+
+Of course, it preserves the main noflushd feature: allow spinning down a drive
+with no recent *read* access, regardless of *write* accesses. Your data will
+reside in ram for longer than if your disk was left spinning (until the next
+explicit flush call actually), so consider this risk.
+
+Block device hierarchy should work with cryptsetup & lvm devices as well as
+mdadm raid, but hasn't been checked.
+
