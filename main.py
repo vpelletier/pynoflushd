@@ -129,6 +129,7 @@ class _BlockDevice(object):
                 # Consider non-rotating disks as always spinning. Ie, never
                 # delay flushes to SSDs.
                 spinning = True
+            self._spinning = spinning
             return spinning
 
     def getTargetSpin(self):
@@ -154,7 +155,6 @@ class _BlockDevice(object):
     def spinDown(self):
         if self._dependent_block_device_list:
             raise ValueError('Should only be called on raw devices')
-        self.flush()
         self.flush()
         success = not self.updateReadStats()[0]
         if success:
@@ -197,20 +197,21 @@ def main(disk_list, default_timeout):
             disk.refreshDepList()
             if disk.controlled:
                 target_spin = disk.getTargetSpin()
+                spinning = disk.spinning
                 read_happened, write_happened = disk.updateReadStats()
-                if read_happened or (not target_spin and write_happened):
-                    # I/O are flowing, disk is spinning and next spin down is
-                    # delayed
-                    if not target_spin:
-                        print ctime(), 'spin up', disk
-                    disk.next_spindown = next_spindown
-                elif target_spin and disk.next_spindown <= now:
-                    print ctime(), 'spindown', disk
-                    if not disk.spinDown():
-                        print '...failed, rescheduling'
-                        disk.next_spindown = next_spindown
-                if disk.spinning:
+                if spinning:
                     disk.flush()
+                    if read_happened or not target_spin:
+                        # Read happened or spun up (sync), schedule next
+                        # spindown.
+                        disk.next_spindown = next_spindown
+                        if not target_spin:
+                            print ctime(), 'spin up', disk
+                    if disk.next_spindown <= now:
+                        print ctime(), 'spindown', disk
+                        if not disk.spinDown():
+                            print '...failed, rescheduling'
+                            disk.next_spindown = next_spindown
         for disk in complete_device_list:
             if not disk.controlled:
                 if disk.spinning:
